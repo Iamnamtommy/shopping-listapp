@@ -179,25 +179,26 @@
   <div class="empty" id="emptyMsg">아직 담긴 항목이 없어요.</div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
-  const STORAGE_KEY = "shopping-list-items";
+  const SUPABASE_URL = "https://pvewssuitqovghizoydp.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_GgIOdmJMAW8VNVJsK_hG0w__fZOQ2v7";
 
-  function loadItems() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  async function loadItems() {
+    const { data, error } = await supabaseClient
+      .from("shopping_items")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) {
+      console.error("Failed to load items:", error);
       return [];
     }
+    return data;
   }
 
-  function saveItems(items) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch {}
-  }
-
-  let items = loadItems();
+  let items = [];
 
   const listEl = document.getElementById("list");
   const emptyMsg = document.getElementById("emptyMsg");
@@ -239,42 +240,80 @@
     }
   }
 
-  function addItem(name) {
+  async function addItem(name) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    items.push({ id: Date.now() + Math.random(), name: trimmed, done: false });
-    saveItems(items);
+    const { data, error } = await supabaseClient
+      .from("shopping_items")
+      .insert({ name: trimmed, done: false })
+      .select()
+      .single();
+    if (error) {
+      console.error("Failed to add item:", error);
+      return;
+    }
+    items.push(data);
     render();
   }
 
-  function toggleDone(id) {
-    items = items.map(i => i.id === id ? { ...i, done: !i.done } : i);
-    saveItems(items);
+  async function toggleDone(id) {
+    const target = items.find(i => i.id === id);
+    if (!target) return;
+    const nextDone = !target.done;
+    const { error } = await supabaseClient
+      .from("shopping_items")
+      .update({ done: nextDone })
+      .eq("id", id);
+    if (error) {
+      console.error("Failed to update item:", error);
+      return;
+    }
+    items = items.map(i => i.id === id ? { ...i, done: nextDone } : i);
     render();
   }
 
-  function deleteItem(id) {
+  async function deleteItem(id) {
+    const { error } = await supabaseClient
+      .from("shopping_items")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      console.error("Failed to delete item:", error);
+      return;
+    }
     items = items.filter(i => i.id !== id);
-    saveItems(items);
     render();
   }
 
-  function clearDone() {
+  async function clearDone() {
+    const doneIds = items.filter(i => i.done).map(i => i.id);
+    if (doneIds.length === 0) return;
+    const { error } = await supabaseClient
+      .from("shopping_items")
+      .delete()
+      .in("id", doneIds);
+    if (error) {
+      console.error("Failed to clear done items:", error);
+      return;
+    }
     items = items.filter(i => !i.done);
-    saveItems(items);
     render();
   }
 
-  addForm.addEventListener("submit", (e) => {
+  addForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    addItem(itemInput.value);
+    const value = itemInput.value;
     itemInput.value = "";
+    await addItem(value);
     itemInput.focus();
   });
 
   clearDoneBtn.addEventListener("click", clearDone);
 
-  render();
+  (async function init() {
+    items = await loadItems();
+    render();
+  })();
 </script>
 </body>
 </html>
