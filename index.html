@@ -1,0 +1,280 @@
+<!-- Created: 2026-09-07 12:25:01 -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>쇼핑 리스트</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #2563eb;
+    --danger: #ef4444;
+    --done-bg: #f0fdf4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d;
+      --card: #22252b;
+      --text: #e6e8eb;
+      --muted: #9aa1ac;
+      --border: #33363d;
+      --accent: #3b82f6;
+      --danger: #f87171;
+      --done-bg: #16281f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .app {
+    width: 100%;
+    max-width: 480px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 20px;
+    text-align: center;
+  }
+  .add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .add-row input {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 15px;
+    outline: none;
+  }
+  .add-row input:focus {
+    border-color: var(--accent);
+  }
+  .add-row button {
+    padding: 12px 18px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .add-row button:active { transform: scale(0.97); }
+
+  .stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+  .stats button {
+    background: none;
+    border: none;
+    color: var(--danger);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  ul.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  li.item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  li.item.done {
+    background: var(--done-bg);
+  }
+  li.item .check {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 13px;
+  }
+  li.item.done .check {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  li.item .name {
+    flex: 1;
+    font-size: 15px;
+    word-break: break-word;
+  }
+  li.item.done .name {
+    text-decoration: line-through;
+    color: var(--muted);
+  }
+  li.item .del {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px;
+  }
+  li.item .del:hover { color: var(--danger); }
+
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 0;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🛒 쇼핑 리스트</h1>
+
+  <form class="add-row" id="addForm">
+    <input type="text" id="itemInput" placeholder="살 물건을 입력하세요" autocomplete="off" />
+    <button type="submit">추가</button>
+  </form>
+
+  <div class="stats">
+    <span id="statsText">항목 0개</span>
+    <button type="button" id="clearDoneBtn">완료 항목 지우기</button>
+  </div>
+
+  <ul class="list" id="list"></ul>
+  <div class="empty" id="emptyMsg">아직 담긴 항목이 없어요.</div>
+</div>
+
+<script>
+  const STORAGE_KEY = "shopping-list-items";
+
+  function loadItems() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveItems(items) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    } catch {}
+  }
+
+  let items = loadItems();
+
+  const listEl = document.getElementById("list");
+  const emptyMsg = document.getElementById("emptyMsg");
+  const statsText = document.getElementById("statsText");
+  const addForm = document.getElementById("addForm");
+  const itemInput = document.getElementById("itemInput");
+  const clearDoneBtn = document.getElementById("clearDoneBtn");
+
+  function render() {
+    listEl.innerHTML = "";
+    emptyMsg.hidden = items.length !== 0;
+
+    const doneCount = items.filter(i => i.done).length;
+    statsText.textContent = `항목 ${items.length}개 · 완료 ${doneCount}개`;
+
+    for (const item of items) {
+      const li = document.createElement("li");
+      li.className = "item" + (item.done ? " done" : "");
+
+      const check = document.createElement("div");
+      check.className = "check";
+      check.textContent = item.done ? "✓" : "";
+      check.addEventListener("click", () => toggleDone(item.id));
+
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = item.name;
+
+      const del = document.createElement("button");
+      del.className = "del";
+      del.type = "button";
+      del.textContent = "✕";
+      del.addEventListener("click", () => deleteItem(item.id));
+
+      li.appendChild(check);
+      li.appendChild(name);
+      li.appendChild(del);
+      listEl.appendChild(li);
+    }
+  }
+
+  function addItem(name) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    items.push({ id: Date.now() + Math.random(), name: trimmed, done: false });
+    saveItems(items);
+    render();
+  }
+
+  function toggleDone(id) {
+    items = items.map(i => i.id === id ? { ...i, done: !i.done } : i);
+    saveItems(items);
+    render();
+  }
+
+  function deleteItem(id) {
+    items = items.filter(i => i.id !== id);
+    saveItems(items);
+    render();
+  }
+
+  function clearDone() {
+    items = items.filter(i => !i.done);
+    saveItems(items);
+    render();
+  }
+
+  addForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    addItem(itemInput.value);
+    itemInput.value = "";
+    itemInput.focus();
+  });
+
+  clearDoneBtn.addEventListener("click", clearDone);
+
+  render();
+</script>
+</body>
+</html>
