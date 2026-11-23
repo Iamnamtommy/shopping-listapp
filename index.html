@@ -122,6 +122,9 @@
     flex-shrink: 0;
     border-radius: 50%;
     border: 2px solid var(--muted);
+    background: transparent;
+    padding: 0;
+    font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -152,6 +155,20 @@
     padding: 4px;
   }
   li.item .del:hover { color: var(--danger); }
+  li.item .check:focus-visible,
+  li.item .del:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .error {
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-size: 14px;
+  }
 
   .empty {
     text-align: center;
@@ -175,6 +192,8 @@
     <button type="button" id="clearDoneBtn">완료 항목 지우기</button>
   </div>
 
+  <div class="error" id="errorMsg" role="alert" hidden></div>
+
   <ul class="list" id="list"></ul>
   <div class="empty" id="emptyMsg">아직 담긴 항목이 없어요.</div>
 </div>
@@ -193,12 +212,25 @@
       .order("created_at", { ascending: true });
     if (error) {
       console.error("Failed to load items:", error);
-      return [];
+      return null;
     }
     return data;
   }
 
   let items = [];
+  let loadFailed = false;
+
+  const errorMsg = document.getElementById("errorMsg");
+
+  function showError(message) {
+    errorMsg.textContent = message;
+    errorMsg.hidden = false;
+  }
+
+  function clearError() {
+    errorMsg.hidden = true;
+    errorMsg.textContent = "";
+  }
 
   const listEl = document.getElementById("list");
   const emptyMsg = document.getElementById("emptyMsg");
@@ -209,7 +241,7 @@
 
   function render() {
     listEl.innerHTML = "";
-    emptyMsg.hidden = items.length !== 0;
+    emptyMsg.hidden = items.length !== 0 || loadFailed;
 
     const doneCount = items.filter(i => i.done).length;
     statsText.textContent = `항목 ${items.length}개 · 완료 ${doneCount}개`;
@@ -218,9 +250,12 @@
       const li = document.createElement("li");
       li.className = "item" + (item.done ? " done" : "");
 
-      const check = document.createElement("div");
+      const check = document.createElement("button");
+      check.type = "button";
       check.className = "check";
       check.textContent = item.done ? "✓" : "";
+      check.setAttribute("aria-pressed", String(item.done));
+      check.setAttribute("aria-label", `${item.name} 완료 표시`);
       check.addEventListener("click", () => toggleDone(item.id));
 
       const name = document.createElement("span");
@@ -231,6 +266,7 @@
       del.className = "del";
       del.type = "button";
       del.textContent = "✕";
+      del.setAttribute("aria-label", `${item.name} 삭제`);
       del.addEventListener("click", () => deleteItem(item.id));
 
       li.appendChild(check);
@@ -250,8 +286,10 @@
       .single();
     if (error) {
       console.error("Failed to add item:", error);
-      return;
+      showError("항목을 추가하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      return false;
     }
+    clearError();
     items.push(data);
     render();
   }
@@ -266,8 +304,10 @@
       .eq("id", id);
     if (error) {
       console.error("Failed to update item:", error);
+      showError("완료 상태를 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.");
       return;
     }
+    clearError();
     items = items.map(i => i.id === id ? { ...i, done: nextDone } : i);
     render();
   }
@@ -279,8 +319,10 @@
       .eq("id", id);
     if (error) {
       console.error("Failed to delete item:", error);
+      showError("항목을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.");
       return;
     }
+    clearError();
     items = items.filter(i => i.id !== id);
     render();
   }
@@ -294,8 +336,10 @@
       .in("id", doneIds);
     if (error) {
       console.error("Failed to clear done items:", error);
+      showError("완료 항목을 지우지 못했어요. 잠시 후 다시 시도해 주세요.");
       return;
     }
+    clearError();
     items = items.filter(i => !i.done);
     render();
   }
@@ -304,14 +348,22 @@
     e.preventDefault();
     const value = itemInput.value;
     itemInput.value = "";
-    await addItem(value);
+    const added = await addItem(value);
+    if (added === false) itemInput.value = value;
     itemInput.focus();
   });
 
   clearDoneBtn.addEventListener("click", clearDone);
 
   (async function init() {
-    items = await loadItems();
+    const loaded = await loadItems();
+    if (loaded === null) {
+      loadFailed = true;
+      showError("목록을 불러오지 못했어요. 인터넷 연결이나 서버 상태를 확인한 뒤 새로고침해 주세요.");
+      items = [];
+    } else {
+      items = loaded;
+    }
     render();
   })();
 </script>
